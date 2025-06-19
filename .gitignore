@@ -1,2 +1,19 @@
+# Log files
 /cep_bat_output.log
 /cep_output.log
+*.log
+
+# Maven build directory
+target/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS files
+.DS_Store
+Thumbs.db
