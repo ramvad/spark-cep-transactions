@@ -1,6 +1,4 @@
-com\example\FlinkCEPTransactionDetector$3.class
 com\example\TestMain.class
-com\example\FlinkCEPTransactionDetector$2.class
-com\example\FlinkCEPTransactionDetector$1.class
-com\example\FlinkCEPTransactionDetector$Transaction.class
-com\example\FlinkCEPTransactionDetector.class
+com\example\SparkCEPTransactionBatch.class
+com\example\SparkCEPTransactionDetector.class
+com\example\SparkCEPTransactionSimple.class

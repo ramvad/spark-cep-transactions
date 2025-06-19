@@ -5,35 +5,31 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.example</groupId>
-    <artifactId>flink-cep-transactions</artifactId>
-    <version>1.0</version>
-
-    <properties>
-  
-        <flink.version>1.17.1</flink.version>
-    </properties>
-
-    <dependencies>
-        <!-- Flink Streaming -->
+    <artifactId>spark-cep-transactions</artifactId>
+    <version>1.0</version>    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <spark.version>3.4.2</spark.version>
+        <scala.binary.version>2.12</scala.binary.version>
+    </properties><dependencies>
+        <!-- Spark Core -->
         <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-streaming-java</artifactId>
-            <version>${flink.version}</version>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_${scala.binary.version}</artifactId>
+            <version>${spark.version}</version>
         </dependency>
 
-        <!-- Flink CEP -->
+        <!-- Spark SQL -->
         <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-cep</artifactId>
-            <version>${flink.version}</version>
-        </dependency>
-     <dependency>
-        <groupId>org.apache.flink</groupId>
-        <artifactId>flink-connector-files</artifactId>
-        <version>1.17.1</version>
-    </dependency>
-
-        <!-- Logging -->
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_${scala.binary.version}</artifactId>
+            <version>${spark.version}</version>
+        </dependency>        <!-- Spark Streaming -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-streaming_${scala.binary.version}</artifactId>
+            <version>${spark.version}</version>
+        </dependency>        <!-- Logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
@@ -66,22 +62,36 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <createDependencyReducedPom>false</createDependencyReducedPom>
-                            <transformers>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>                            <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.example.FlinkCEPTransactionDetector</mainClass>
+                                    <mainClass>com.example.SparkCEPTransactionDetector</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
-              <plugin>
+            </plugin>              <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.1.0</version>
         <configuration>
-          <mainClass>com.example.FlinkCEPTransactionDetector</mainClass>
+          <mainClass>com.example.SparkCEPTransactionDetector</mainClass>
+          <options>
+            <option>--add-opens=java.base/java.lang=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/java.lang.invoke=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/java.io=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/java.net=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/java.nio=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/java.util=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/sun.nio.ch=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/sun.nio.cs=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/sun.security.action=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/sun.util.calendar=ALL-UNNAMED</option>
+            <option>--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED</option>
+          </options>
         </configuration>
       </plugin>
         </plugins>

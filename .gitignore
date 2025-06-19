@@ -6,6 +6,11 @@
 # Maven build directory
 target/
 
+# Spark specific
+spark-warehouse/
+derby.log
+metastore_db/
+
 # IDE files
 .idea/
 *.iml
