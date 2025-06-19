@@ -1,2 +1,2 @@
-com\example\SparkCEPTransactionDetector.class
 com\example\SparkCEPTransactionBatch.class
+com\example\SparkCEPTransactionScheduler.class
