@@ -9,15 +9,40 @@ import org.apache.spark.sql.types.StructType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 import static org.apache.spark.sql.functions.*;
 
 public class SparkCEPTransactionSimple {
 
     private static final Logger LOG = LoggerFactory.getLogger(SparkCEPTransactionSimple.class);
+    private static PrintWriter logWriter;
+    
+    // Helper method to log to both console and file
+    private static void logAndPrint(String message) {
+        System.out.println(message);
+        LOG.info(message);
+        if (logWriter != null) {
+            logWriter.println(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + " - " + message);
+            logWriter.flush();
+        }
+    }
     
     public static void main(String[] args) {
         
-        System.out.println(">>> SparkCEPTransactionSimple start");
+        // Initialize log file
+        try {
+            String logFileName = "spark-cep-simple-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".log";
+            logWriter = new PrintWriter(new FileWriter(logFileName, true));
+            logAndPrint(">>> SparkCEPTransactionSimple start - Log file: " + logFileName);
+        } catch (IOException e) {
+            System.err.println("Failed to initialize log file: " + e.getMessage());
+            LOG.error("Failed to initialize log file", e);
+        }
         
         try {
             // Create Spark Session with minimal config
@@ -30,7 +55,7 @@ public class SparkCEPTransactionSimple {
             spark.sparkContext().setLogLevel("WARN");
             
             // First try batch processing to verify data loading
-            System.out.println("=== TESTING BATCH FIRST ===");
+            logAndPrint("=== TESTING BATCH FIRST ===");
             Dataset<Row> batchData = spark
                     .read()
                     .format("csv")
@@ -38,12 +63,12 @@ public class SparkCEPTransactionSimple {
                     .option("inferSchema", "true")
                     .load("transactions.csv");
             
-            System.out.println("Batch data loaded successfully:");
+            logAndPrint("Batch data loaded successfully:");
             batchData.show();
             batchData.printSchema();
             
             // Now try streaming
-            System.out.println("=== STARTING STREAMING ===");
+            logAndPrint("=== STARTING STREAMING ===");
             
             StructType schema = new StructType(new StructField[]{
                     DataTypes.createStructField("timestamp", DataTypes.StringType, false),
@@ -67,8 +92,8 @@ public class SparkCEPTransactionSimple {
                     .trigger(org.apache.spark.sql.streaming.Trigger.ProcessingTime("5 seconds"))
                     .start();
             
-            System.out.println("Streaming started. Waiting for data...");
-            System.out.println("Press Ctrl+C to stop");
+            logAndPrint("Streaming started. Waiting for data...");
+            logAndPrint("Press Ctrl+C to stop");
             
             // Wait for 30 seconds then stop
             Thread.sleep(30000);
@@ -79,8 +104,13 @@ public class SparkCEPTransactionSimple {
         } catch (Exception e) {
             System.err.println("Error occurred:");
             e.printStackTrace();
+        } finally {
+            // Close log file
+            if (logWriter != null) {
+                logWriter.close();
+            }
         }
         
-        System.out.println(">>> SparkCEPTransactionSimple end");
+        logAndPrint(">>> SparkCEPTransactionSimple end");
     }
 }

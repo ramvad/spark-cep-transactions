@@ -10,6 +10,11 @@ import org.apache.spark.sql.types.StructType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeoutException;
 
 import static org.apache.spark.sql.functions.*;
@@ -17,11 +22,31 @@ import static org.apache.spark.sql.functions.*;
 public class SparkCEPTransactionDetector {
 
     private static final Logger LOG = LoggerFactory.getLogger(SparkCEPTransactionDetector.class);
+    private static PrintWriter logWriter;
+    
+    // Helper method to log to both console and file
+    private static void logAndPrint(String message) {
+        System.out.println(message);
+        LOG.info(message);
+        if (logWriter != null) {
+            logWriter.println(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + " - " + message);
+            logWriter.flush();
+        }
+    }
     
     public static void main(String[] args) throws TimeoutException, StreamingQueryException {
         
-        System.out.println(">>> SparkCEPTransactionDetector start");
-        LOG.info(">>> SparkCEPTransactionDetector starting...");
+        // Initialize log file
+        try {
+            String logFileName = "spark-cep-streaming-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".log";
+            logWriter = new PrintWriter(new FileWriter(logFileName, true));
+            logAndPrint(">>> SparkCEPTransactionDetector start - Log file: " + logFileName);
+        } catch (IOException e) {
+            System.err.println("Failed to initialize log file: " + e.getMessage());
+            LOG.error("Failed to initialize log file", e);
+        }
+        
+        logAndPrint(">>> SparkCEPTransactionDetector starting...");
         
         // Create Spark Session
         SparkSession spark = SparkSession.builder()
@@ -192,11 +217,11 @@ public class SparkCEPTransactionDetector {
                 .queryName("ProcessedTransactions")
                 .start();
         
-        System.out.println("Spark CEP Transaction Detector is running...");
-        System.out.println("Monitoring for suspicious transaction patterns:");
-        System.out.println("- 3+ transactions within 1 hour");
-        System.out.println("- Total amount > $1000");
-        System.out.println("Press Ctrl+C to stop...");
+        logAndPrint("Spark CEP Transaction Detector is running...");
+        logAndPrint("Monitoring for suspicious transaction patterns:");
+        logAndPrint("- 3+ transactions within 1 hour");
+        logAndPrint("- Total amount > $1000");
+        logAndPrint("Press Ctrl+C to stop...");
         
         try {
             // Wait for queries to finish (they won't in streaming mode)
@@ -209,6 +234,6 @@ public class SparkCEPTransactionDetector {
             spark.stop();
         }
         
-        System.out.println(">>> SparkCEPTransactionDetector ending");
+        logAndPrint(">>> SparkCEPTransactionDetector ending");
     }
 }

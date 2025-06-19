@@ -2,13 +2,38 @@ package com.example;
 
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
+
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 import static org.apache.spark.sql.functions.*;
 
 public class TestMain {
     
+    private static PrintWriter logWriter;
+    
+    // Helper method to log to both console and file
+    private static void logAndPrint(String message) {
+        System.out.println(message);
+        if (logWriter != null) {
+            logWriter.println(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + " - " + message);
+            logWriter.flush();
+        }
+    }
+    
     public static void main(String[] args) {
         
-        System.out.println("=== MINIMAL SPARK TEST ===");
+        // Initialize log file
+        try {
+            String logFileName = "spark-test-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".log";
+            logWriter = new PrintWriter(new FileWriter(logFileName, true));
+            logAndPrint("=== MINIMAL SPARK TEST - Log file: " + logFileName + " ===");
+        } catch (IOException e) {
+            System.err.println("Failed to initialize log file: " + e.getMessage());
+        }
         
         try {
             // Create the simplest possible Spark session
@@ -21,7 +46,7 @@ public class TestMain {
             
             spark.sparkContext().setLogLevel("ERROR");
             
-            System.out.println("✅ Spark session created successfully!");
+            logAndPrint("[OK] Spark session created successfully!");
             
             // Test basic functionality
             Dataset<Row> df = spark.read()
@@ -30,8 +55,8 @@ public class TestMain {
                     .option("inferSchema", "true")
                     .load("transactions.csv");
             
-            System.out.println("✅ CSV file loaded successfully!");
-            System.out.println("Row count: " + df.count());
+            logAndPrint("[OK] CSV file loaded successfully!");
+            logAndPrint("Row count: " + df.count());
             
             df.show(5);
             
@@ -42,7 +67,7 @@ public class TestMain {
                     .select("accountId", "amount", "eventTime")
                     .orderBy("accountId", "eventTime");
             
-            System.out.println("✅ Data processing successful!");
+            logAndPrint("[OK] Data processing successful!");
             processed.show();
             
             // Test window function
@@ -54,15 +79,18 @@ public class TestMain {
                             )
                     );
             
-            System.out.println("✅ Window functions working!");
+            logAndPrint("[OK] Window functions working!");
             windowed.show();
-            
-            spark.stop();
-            System.out.println("✅ ALL TESTS PASSED!");
+              spark.stop();
+            logAndPrint("[OK] ALL TESTS PASSED!");
             
         } catch (Exception e) {
-            System.err.println("❌ ERROR: " + e.getMessage());
+            System.err.println("[ERROR] " + e.getMessage());
             e.printStackTrace();
+        } finally {
+            if (logWriter != null) {
+                logWriter.close();
+            }
         }
     }
 }
