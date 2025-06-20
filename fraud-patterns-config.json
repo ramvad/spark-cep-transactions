@@ -1,0 +1,110 @@
+{
+  "fraudPatterns": {
+    "version": "1.0",
+    "lastUpdated": "2025-06-19T14:00:00Z",
+    "patterns": [
+      {
+        "id": "HIGH_FREQUENCY_PATTERN",
+        "name": "High Frequency Transactions",
+        "description": "Detects accounts with multiple transactions in short time windows",
+        "enabled": true,
+        "priority": 1,
+        "parameters": {
+          "windowSizeMinutes": 5,
+          "minimumTransactionCount": 3,
+          "minimumTotalAmount": 1000.0,
+          "alertLevel": "HIGH"
+        },
+        "sqlCondition": "transactionCount >= ${minimumTransactionCount} AND totalAmount > ${minimumTotalAmount}",
+        "alertMessage": "High frequency transactions detected: ${transactionCount} transactions totaling $${totalAmount} in ${windowSizeMinutes} minutes"
+      },
+      {
+        "id": "SEQUENTIAL_LARGE_AMOUNTS",
+        "name": "Sequential Large Amount Pattern",
+        "description": "Detects sequence of increasing transaction amounts",
+        "enabled": true,
+        "priority": 2,
+        "parameters": {
+          "minimumSequenceLength": 3,
+          "timeWindowHours": 1,
+          "minimumTotalAmount": 1000.0,
+          "escalationFactor": 2.0,
+          "alertLevel": "MEDIUM"
+        },
+        "sqlCondition": "rowNum >= ${minimumSequenceLength} AND timeSpanMinutes <= ${timeWindowHours} * 60 AND threeTransactionTotal > ${minimumTotalAmount}",
+        "alertMessage": "Sequential large amount pattern: ${minimumSequenceLength} transactions totaling $${threeTransactionTotal}"
+      },
+      {
+        "id": "UNUSUAL_AMOUNT_THRESHOLD",
+        "name": "Unusual Amount Threshold",
+        "description": "Detects transactions above specified thresholds",
+        "enabled": true,
+        "priority": 3,
+        "parameters": {
+          "largeAmountThreshold": 5000.0,
+          "mediumAmountThreshold": 2000.0,
+          "alertLevel": "HIGH"
+        },
+        "sqlCondition": "amount > ${largeAmountThreshold}",
+        "alertMessage": "Large amount transaction detected: $${amount}"
+      },
+      {
+        "id": "VELOCITY_PATTERN",
+        "name": "Transaction Velocity Pattern", 
+        "description": "Detects rapid consecutive transactions",
+        "enabled": true,
+        "priority": 4,
+        "parameters": {
+          "maxTimeBetweenTransactionsMinutes": 2,
+          "minimumTransactionCount": 5,
+          "alertLevel": "MEDIUM"
+        },
+        "sqlCondition": "timeBetweenTransactions <= ${maxTimeBetweenTransactionsMinutes}",
+        "alertMessage": "High velocity transactions detected"
+      },
+      {
+        "id": "MERCHANT_RISK_PATTERN",
+        "name": "High Risk Merchant Pattern",
+        "description": "Detects transactions with high-risk merchants",
+        "enabled": false,
+        "priority": 5,
+        "parameters": {
+          "riskMerchantCategories": ["ATM", "CASH_ADVANCE", "GAMBLING"],
+          "amountThreshold": 1000.0,
+          "alertLevel": "LOW"
+        },
+        "sqlCondition": "merchantCategory IN (${riskMerchantCategories}) AND amount > ${amountThreshold}",
+        "alertMessage": "High risk merchant transaction: ${merchantCategory} for $${amount}"
+      }
+    ]
+  },
+  "alertConfiguration": {
+    "emailNotifications": true,
+    "smsNotifications": false,
+    "webhookUrl": "https://api.example.com/fraud-alerts",
+    "batchSize": 100,
+    "alertLevels": {
+      "HIGH": {
+        "immediateAlert": true,
+        "blockTransaction": true,
+        "requireManualReview": true
+      },
+      "MEDIUM": {
+        "immediateAlert": true,
+        "blockTransaction": false,
+        "requireManualReview": true
+      },
+      "LOW": {
+        "immediateAlert": false,
+        "blockTransaction": false,
+        "requireManualReview": false
+      }
+    }
+  },
+  "dataConfiguration": {
+    "inputPath": "transactions.csv",
+    "outputPath": "fraud_alerts",
+    "checkpointPath": "checkpoints/ProcessedTransactions",
+    "logLevel": "INFO"
+  }
+}
