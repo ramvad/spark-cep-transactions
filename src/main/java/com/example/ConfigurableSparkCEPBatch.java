@@ -8,6 +8,7 @@ import org.apache.spark.sql.expressions.WindowSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -26,24 +27,33 @@ public class ConfigurableSparkCEPBatch {
     
     public static void main(String[] args) {
         String configPath = args.length > 0 ? args[0] : "fraud-patterns-config.json";
-        
-        // Initialize configuration
+          // Initialize configuration
         patternConfig = new FraudPatternConfig(configPath);
+        
+        // Set Hadoop system properties for Windows compatibility
+        System.setProperty("hadoop.home.dir", "C:\\");
+        System.setProperty("java.security.krb5.realm", "");
+        System.setProperty("java.security.krb5.kdc", "");
         
         SparkSession spark = SparkSession.builder()
                 .appName("Configurable Spark CEP Transaction Batch")
                 .master("local[*]")
                 .config("spark.sql.adaptive.enabled", "true")
                 .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+                .config("spark.ui.enabled", "false")  // Disable Spark UI
+                .config("spark.sql.execution.arrow.pyspark.enabled", "false")
+                .config("spark.hadoop.fs.defaultFS", "file:///")
+                .config("spark.sql.warehouse.dir", System.getProperty("user.dir") + "/spark-warehouse")
                 .getOrCreate();
 
-        try {
-            // Setup logging
+        // Set Spark log level to ERROR to reduce noise
+        spark.sparkContext().setLogLevel("ERROR");
+
+        try {            // Setup logging
             setupLogging();
             
-            logAndPrint("=== Configurable Spark CEP Transaction Batch Started ===");
-            logAndPrint("Configuration version: " + patternConfig.getConfigVersion());
-            logAndPrint("Last updated: " + patternConfig.getLastUpdated());
+            logAndPrint("=== Configurable Spark CEP Fraud Detection ===");
+            logAndPrint("Configuration: v" + patternConfig.getConfigVersion() + " (" + patternConfig.getLastUpdated() + ")");
             
             // Load data configuration
             Map<String, String> dataConfig = patternConfig.getDataConfiguration();
@@ -92,14 +102,14 @@ public class ConfigurableSparkCEPBatch {
         
         for (FraudPattern pattern : enabledPatterns) {
             logAndPrint("Applying pattern: " + pattern.getName() + " (ID: " + pattern.getId() + ")");
-            
-            try {
+              try {
                 Dataset<Row> patternAlerts = applyPattern(transactions, pattern);
+                Dataset<Row> normalizedAlerts = normalizePatternSchema(patternAlerts);
                 
                 if (allAlerts == null) {
-                    allAlerts = patternAlerts;
+                    allAlerts = normalizedAlerts;
                 } else {
-                    allAlerts = allAlerts.union(patternAlerts);
+                    allAlerts = allAlerts.union(normalizedAlerts);
                 }
                 
                 long alertCount = patternAlerts.count();
@@ -113,13 +123,10 @@ public class ConfigurableSparkCEPBatch {
         
         return allAlerts != null ? allAlerts.distinct() : transactions.limit(0);
     }
-    
-    /**
+      /**
      * Apply a specific fraud pattern
      */
     private static Dataset<Row> applyPattern(Dataset<Row> transactions, FraudPattern pattern) {
-        Map<String, Object> params = pattern.getParameters();
-        
         switch (pattern.getId()) {
             case "HIGH_FREQUENCY_PATTERN":
                 return applyHighFrequencyPattern(transactions, pattern);
@@ -157,7 +164,7 @@ public class ConfigurableSparkCEPBatch {
         
         Dataset<Row> windowed = transactions
                 .withColumn("transactionCount", count("*").over(window))
-                .withColumn("totalAmount", sum("amount").over(window))
+                .withColumn("totalAmount", sum("transactionAmount").over(window))
                 .filter(col("transactionCount").geq(minTransactionCount))
                 .filter(col("totalAmount").gt(minTotalAmount));
         
@@ -186,11 +193,10 @@ public class ConfigurableSparkCEPBatch {
         WindowSpec sequenceWindow = Window.partitionBy("accountId").orderBy("eventTime");
         
         Dataset<Row> sequential = transactions
-                .withColumn("rowNum", row_number().over(sequenceWindow))
-                .withColumn("prev1Amount", lag("amount", 1).over(sequenceWindow))
-                .withColumn("prev2Amount", lag("amount", 2).over(sequenceWindow))
+                .withColumn("rowNum", row_number().over(sequenceWindow))                .withColumn("prev1Amount", lag("transactionAmount", 1).over(sequenceWindow))
+                .withColumn("prev2Amount", lag("transactionAmount", 2).over(sequenceWindow))
                 .withColumn("threeTransactionTotal", 
-                    col("amount").plus(coalesce(col("prev1Amount"), lit(0.0)))
+                    col("transactionAmount").plus(coalesce(col("prev1Amount"), lit(0.0)))
                                  .plus(coalesce(col("prev2Amount"), lit(0.0))))
                 .withColumn("timeSpanMinutes",
                     col("eventTime").minus(lag("eventTime", 2).over(sequenceWindow)).divide(60))
@@ -217,7 +223,7 @@ public class ConfigurableSparkCEPBatch {
         double threshold = (Double) params.get("largeAmountThreshold");
         
         Dataset<Row> largeAmounts = transactions
-                .filter(col("amount").gt(threshold));
+                .filter(col("transactionAmount").gt(threshold));
         
         return largeAmounts
                 .withColumn("patternId", lit(pattern.getId()))
@@ -225,7 +231,7 @@ public class ConfigurableSparkCEPBatch {
                 .withColumn("alertLevel", lit(params.get("alertLevel").toString()))
                 .withColumn("alertMessage", 
                     format_string(pattern.getAlertMessage().replace("${amount}", "%.2f"),
-                        col("amount")))
+                        col("transactionAmount")))
                 .withColumn("detectionTime", current_timestamp());
     }
     
@@ -260,19 +266,17 @@ public class ConfigurableSparkCEPBatch {
         @SuppressWarnings("unchecked")
         List<String> riskCategories = (List<String>) params.get("riskMerchantCategories");
         double amountThreshold = (Double) params.get("amountThreshold");
-        
-        Dataset<Row> riskMerchants = transactions
+          Dataset<Row> riskMerchants = transactions
                 .filter(col("merchantCategory").isin(riskCategories.toArray()))
-                .filter(col("amount").gt(amountThreshold));
+                .filter(col("transactionAmount").gt(amountThreshold));
         
         return riskMerchants
                 .withColumn("patternId", lit(pattern.getId()))
                 .withColumn("patternName", lit(pattern.getName()))
-                .withColumn("alertLevel", lit(params.get("alertLevel").toString()))
-                .withColumn("alertMessage", 
+                .withColumn("alertLevel", lit(params.get("alertLevel").toString()))                .withColumn("alertMessage", 
                     format_string(pattern.getAlertMessage().replace("${merchantCategory}", "%s")
                                                           .replace("${amount}", "%.2f"),
-                        col("merchantCategory"), col("amount")))
+                        col("merchantCategory"), col("transactionAmount")))
                 .withColumn("detectionTime", current_timestamp());
     }
     
@@ -301,12 +305,11 @@ public class ConfigurableSparkCEPBatch {
      */
     private static Dataset<Row> loadTransactions(SparkSession spark, String inputPath) {
         logAndPrint("Loading transactions from: " + inputPath);
-        
-        Dataset<Row> transactions = spark.read()
+          Dataset<Row> transactions = spark.read()
                 .option("header", "true")
                 .option("inferSchema", "true")
                 .csv(inputPath)
-                .filter(col("amount").gt(0))
+                .filter(col("transactionAmount").gt(0))
                 .withColumn("eventTime", unix_timestamp(col("timestamp"), "yyyy-MM-dd HH:mm:ss"));
         
         long totalTransactions = transactions.count();
@@ -321,39 +324,112 @@ public class ConfigurableSparkCEPBatch {
     private static void processAlerts(Dataset<Row> alerts) {
         long alertCount = alerts.count();
         logAndPrint("Total fraud alerts detected: " + alertCount);
-        
-        if (alertCount > 0) {
-            logAndPrint("Alert breakdown by pattern:");
-            alerts.groupBy("patternId", "patternName", "alertLevel")
-                  .count()
-                  .orderBy(desc("count"))
-                  .show(false);
+          if (alertCount > 0) {
+            logAndPrint("\n--- FRAUD ALERT SUMMARY ---");
             
-            // Show sample alerts
-            logAndPrint("Sample fraud alerts:");
-            showAndLog(alerts.select("accountId", "amount", "patternName", "alertLevel", "alertMessage")
-                            .orderBy(desc("amount"))
-                            .limit(10), false);
+            // Show pattern breakdown
+            logAndPrint("Alerts by pattern:");
+            Dataset<Row> breakdown = alerts.groupBy("patternId", "patternName", "alertLevel")
+                  .count()
+                  .orderBy(desc("count"));
+            
+            // Display breakdown concisely
+            Row[] breakdownRows = (Row[]) breakdown.collect();
+            for (Row row : breakdownRows) {
+                logAndPrint(String.format("  %s (%s): %d alerts", 
+                    row.getString(1), row.getString(2), row.getLong(3)));
+            }
+            
+            // Show top alerts
+            logAndPrint("\nTop fraud alerts:");
+            Dataset<Row> topAlerts = alerts.select("accountId", "transactionAmount", "patternName", "alertMessage")
+                            .orderBy(desc("transactionAmount"))
+                            .limit(5);
+            
+            Row[] alertRows = (Row[]) topAlerts.collect();
+            for (Row row : alertRows) {
+                logAndPrint(String.format("  Account: %s | Amount: $%.2f | Pattern: %s", 
+                    row.getString(0), row.getDouble(1), row.getString(2)));
+                logAndPrint(String.format("    Message: %s", row.getString(3)));
+            }
+            logAndPrint("--- END SUMMARY ---\n");
         }
-    }
-    
-    /**
-     * Save results with configuration
+    }    /**
+     * Save results with configuration - Windows compatible version
      */
     private static void saveResults(Dataset<Row> alerts, String outputPath) {
         if (alerts.count() > 0) {
             logAndPrint("Saving fraud alerts to: " + outputPath);
             
-            alerts.coalesce(1)
-                  .write()
-                  .mode(SaveMode.Overwrite)
-                  .option("header", "true")
-                  .csv(outputPath);
-            
-            logAndPrint("Fraud alerts saved successfully");
+            try {
+                // Create output directory
+                File outputDir = new File(outputPath);
+                if (!outputDir.exists()) {
+                    outputDir.mkdirs();
+                }
+                
+                // Use pure Java file writing to avoid Hadoop issues on Windows
+                saveAlertsAsCSV(alerts, outputPath);
+                logAndPrint("Fraud alerts saved successfully to " + outputPath + "/fraud_alerts.csv");
+                
+            } catch (Exception e) {
+                LOG.error("Error saving fraud alerts", e);
+                logAndPrint("Warning: Could not save fraud alerts to file: " + e.getMessage());
+                logAndPrint("Fraud detection completed successfully, but file output failed.");
+            }
+        } else {
+            logAndPrint("No fraud alerts to save");
         }
     }
     
+    /**
+     * Save alerts as CSV using pure Java (no Hadoop dependencies)
+     */
+    private static void saveAlertsAsCSV(Dataset<Row> alerts, String outputPath) throws Exception {
+        File csvFile = new File(outputPath + "/fraud_alerts.csv");
+          try (FileWriter writer = new FileWriter(csvFile)) {
+            // Write CSV header
+            writer.write("timestamp,accountId,transactionAmount,patternId,patternName,alertLevel,alertMessage,detectionTime\n");
+            
+            // Collect all rows and write them
+            Row[] rows = (Row[]) alerts.collect();
+            for (Row row : rows) {
+                // Handle different data types safely
+                String timestamp = safeGetString(row, 0);
+                String accountId = safeGetString(row, 1);
+                Double transactionAmount = row.getDouble(2);
+                String patternId = safeGetString(row, 3);
+                String patternName = safeGetString(row, 4);
+                String alertLevel = safeGetString(row, 5);
+                String alertMessage = safeGetString(row, 6).replace("\"", "\"\"");
+                String detectionTime = safeGetString(row, 7);
+                
+                writer.write(String.format("%s,%s,%.2f,%s,%s,%s,\"%s\",%s\n",
+                    timestamp, accountId, transactionAmount, patternId, 
+                    patternName, alertLevel, alertMessage, detectionTime
+                ));
+            }
+        }
+    }
+    
+    /**
+     * Normalize the schema of fraud pattern results to ensure consistency for union operations
+     */
+    private static Dataset<Row> normalizePatternSchema(Dataset<Row> patternResult) {
+        // Define the standard schema for all fraud alerts
+        return patternResult
+                .select(
+                    col("timestamp"),
+                    col("accountId"),
+                    col("transactionAmount"),
+                    col("patternId"),
+                    col("patternName"),
+                    col("alertLevel"),
+                    col("alertMessage"),
+                    col("detectionTime")
+                );
+    }
+
     // Helper methods (same as original implementation)
     private static void setupLogging() {
         try {
@@ -372,31 +448,16 @@ public class ConfigurableSparkCEPBatch {
         if (logWriter != null) {
             logWriter.println(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + " - " + message);
             logWriter.flush();
-        }
-    }
+        }    }
     
-    private static void showAndLog(Dataset<Row> df, boolean truncate) {
-        df.show(20, truncate);
-        
-        if (logWriter != null) {
-            try {
-                String timestamp = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-                logWriter.println(timestamp + " - DataFrame Content:");
-                logWriter.println(timestamp + " - Schema: " + df.schema().treeString());
-                
-                Row[] rows = (Row[]) df.collect();
-                if (rows.length > 0) {
-                    String[] columnNames = df.columns();
-                    logWriter.println(timestamp + " - Columns: " + String.join(", ", columnNames));
-                    
-                    for (int i = 0; i < Math.min(rows.length, 10); i++) {
-                        logWriter.println(timestamp + " - Row " + i + ": " + rows[i].toString());
-                    }
-                }
-                logWriter.flush();
-            } catch (Exception e) {
-                LOG.error("Error logging DataFrame content", e);
-            }
+    /**
+     * Safely get string value from Row, handling different data types
+     */
+    private static String safeGetString(Row row, int index) {
+        Object value = row.get(index);
+        if (value == null) {
+            return "";
         }
+        return value.toString();
     }
 }

@@ -1,0 +1,5 @@
+timestamp,accountId,transactionAmount,patternId,patternName,alertLevel,alertMessage,detectionTime
+2025-06-13 18:20:00.0,acct4,100.00,SEQUENTIAL_LARGE_AMOUNTS,Sequential Large Amount Pattern,MEDIUM,"Sequential large amount pattern: 3 transactions totaling $1200.00",2025-06-19 20:15:31.328436
+2025-06-13 16:30:00.0,acct1,250.00,SEQUENTIAL_LARGE_AMOUNTS,Sequential Large Amount Pattern,MEDIUM,"Sequential large amount pattern: 3 transactions totaling $1050.00",2025-06-19 20:15:31.328436
+2025-06-13 12:30:00.0,acct2,200.00,SEQUENTIAL_LARGE_AMOUNTS,Sequential Large Amount Pattern,MEDIUM,"Sequential large amount pattern: 3 transactions totaling $1250.00",2025-06-19 20:15:31.328436
+2025-06-13 10:45:00.0,acct1,300.00,SEQUENTIAL_LARGE_AMOUNTS,Sequential Large Amount Pattern,MEDIUM,"Sequential large amount pattern: 3 transactions totaling $1050.00",2025-06-19 20:15:31.328436

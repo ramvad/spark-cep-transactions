@@ -38,9 +38,12 @@ if not exist "fraud-patterns-config.json" (
 echo [INFO] Starting Configurable Spark CEP Transaction Batch...
 echo.
 
-REM Run the configurable batch processor
-mvn exec:java -Dexec.mainClass="com.example.ConfigurableSparkCEPBatch" -Dexec.args="fraud-patterns-config.json" ^
-    -Dexec.args="--add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-exports java.base/sun.nio.ch=ALL-UNNAMED" ^
+REM Run the configurable batch processor with Java 17 compatibility flags
+set JVM_ARGS=--add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.lang.invoke=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.util.concurrent=ALL-UNNAMED --add-opens java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/sun.nio.cs=ALL-UNNAMED --add-opens java.base/sun.security.action=ALL-UNNAMED --add-opens java.base/sun.util.calendar=ALL-UNNAMED --add-opens java.security.jgss/sun.security.krb5=ALL-UNNAMED
+
+mvn exec:java -Dexec.mainClass="com.example.ConfigurableSparkCEPBatch" ^
+    -Dexec.args="fraud-patterns-config.json" ^
+    -Dexec.jvmArgs="%JVM_ARGS%" ^
     -q
 
 if %ERRORLEVEL% equ 0 (
